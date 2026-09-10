@@ -26,7 +26,9 @@ classifiers = [
 ]
 dependencies = [
     "tealtiger>=1.4.0",
-    "mcp>=1.0.0",
+    # mcp 2.x renamed FastMCP -> MCPServer and dropped mcp.server.fastmcp.
+    # This server targets the v1 FastMCP API; pin until migrated to 2.x.
+    "mcp>=1.0.0,<2",
 ]
 
 [project.urls]
@@ -43,8 +45,16 @@ dev = [
 [project.scripts]
 tealtiger-mcp = "tealtiger_mcp.server:main"
 
+[tool.hatch.build]
+# The monorepo .gitignore has a broad `src/` rule (with per-package `!`
+# un-ignores). Hatchling's default file selection defers to VCS ignore and
+# does not honour the negation, producing an empty wheel. Disable VCS-based
+# selection so the package sources are always included.
+ignore-vcs = true
+
 [tool.hatch.build.targets.wheel]
-packages = ["src/tealtiger_mcp"]
+only-include = ["src/tealtiger_mcp"]
+sources = ["src"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
