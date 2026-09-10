@@ -40,6 +40,16 @@ agent = create_agent(
 
 Every tool call, model input, and model output now flows through deterministic governance evaluation.
 
+The same middleware governs both sync and async agents — no configuration change:
+
+```python
+# Sync
+result = agent.invoke({"messages": [{"role": "user", "content": "..."}]})
+
+# Async (governed through awrap_tool_call)
+result = await agent.ainvoke({"messages": [{"role": "user", "content": "..."}]})
+```
+
 ## Multi-Stage Defense
 
 TealTiger doesn't just govern tool calls — it protects at **every stage** of the agent lifecycle:
@@ -57,9 +67,10 @@ User Input → [Stage 1: Input Defense] → Model → [Stage 2: Output Defense]
 | `before_agent` | Session init | Initialize governance session, load policies |
 | `before_model` | **Input defense** | PII detection, prompt injection blocking, content moderation |
 | `after_model` | **Output defense** | Response PII scanning, secret detection, content classification |
-| `wrap_tool_call` | **Pre-tool defense** | Tool authorization, argument validation, cost check |
-| `after_tool` | **Post-tool defense** | Tool output scanning, secret detection, PII in results |
+| `wrap_tool_call` / `awrap_tool_call` | **Pre-tool + post-tool defense** | Tool authorization, argument validation, cost check (before execution); scanning the tool result for PII/secrets before it re-enters context (after execution) |
 | `after_agent` | Session close | Finalize evidence trail, emit audit summary |
+
+> **Note:** LangChain's `AgentMiddleware` has no separate post-tool hook, so post-tool scanning runs inside `wrap_tool_call` (and its async counterpart `awrap_tool_call`), where the tool result is available. Async agents invoked via `ainvoke()` / `astream()` are governed through `awrap_tool_call`.
 
 All stages are configured through a single middleware instance — policies are automatically applied at the appropriate lifecycle point.
 
