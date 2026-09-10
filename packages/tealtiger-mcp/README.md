@@ -4,6 +4,29 @@ MCP server that exposes TealTiger's guardrails, cost tracking, and security chec
 
 All enforcement runs locally — no data leaves your process.
 
+## When to use this (vs. the SDK vs. framework adapters)
+
+TealTiger governance ships in three forms, all built on the **same core engine** — pick by how much control you need:
+
+| Surface | What it is | Enforcement | Use when |
+|---------|-----------|-------------|----------|
+| **SDK** (`tealtiger` Python / `@tealtiger/*` TS) | Governance wrapped around your model client, inline | **Guaranteed** — the request cannot proceed unless it passes | You want deterministic governance on every agent action |
+| **Framework adapters** (`langchain-tealtiger`, `haystack-tealtiger`, …) | Governance wired into a framework's execution path (middleware / advisors / callbacks) | **Guaranteed**, inline within that framework | You're building on that framework and want native, enforced integration |
+| **MCP server** (this package) | Governance exposed as callable MCP tools over a protocol | **Advisory** — the agent (or user) chooses to call the tools | You want on-demand governance in an MCP client, or from a runtime where embedding the SDK isn't practical |
+
+**Key distinction:** the SDK and framework adapters are the **enforcement path** — governance runs inline and cannot be skipped. The MCP server exposes **callable governance tools**; a model may choose *not* to call them, so it is a complement to the SDK, **not a replacement** for guaranteed enforcement.
+
+Good fits for the MCP server:
+- MCP clients (Claude Desktop, Cursor, Kiro) that want on-demand PII / cost / injection checks.
+- Non-Python/TS runtimes (e.g. a Java/Spring service) that reach governance over the protocol instead of reimplementing it.
+- Interactive checks during development.
+
+### Language support & clients
+
+- **Serves any language.** MCP is a language-agnostic JSON-RPC protocol. The server is implemented in Python (it wraps the TealTiger Python engine), but **any MCP client — Python, TypeScript, Java, etc. — can connect.** The client never imports the Python code; it speaks the protocol.
+- **You do not need a "TealTiger client."** The MCP *clients* are your existing host apps (Claude Desktop, Cursor, Kiro, Cline) or the official MCP client SDKs (`mcp` for Python, `@modelcontextprotocol/sdk` for TS). Point your client at this server using the config below.
+- **Deployment note:** because the server is Python, the host needs Python available (or run it via `uvx` / a container). That's a deployment detail, not a language limitation on callers.
+
 ## Status
 
 > **Pre-release.** This package is functional and fully tested but **not yet published to PyPI**. Install from source (below) until the first release lands. The `pip install` / `uvx` instructions will work once it is published.
