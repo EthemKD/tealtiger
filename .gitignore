@@ -115,6 +115,8 @@ src/
 !packages/tealtiger-harness/src/**
 !packages/tealtiger-contracts/python/src/
 !packages/tealtiger-contracts/python/src/**
+!packages/tealtiger-mcp/src/
+!packages/tealtiger-mcp/src/**
 
 # Postman collections
 postman/
@@ -130,7 +132,8 @@ tealtiger-sot-repo/
 TealTiger-LandingPage/
 TealTiger-Blog/
 TealTiger-Cookbook/
-TealTiger-MCP/
+/TealTiger-MCP/
+!packages/tealtiger-mcp/
 tealtiger-docs-repo/
 tealtiger-docs-source/
 tealtiger-docs-target/
