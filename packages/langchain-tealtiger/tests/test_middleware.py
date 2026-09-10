@@ -525,3 +525,151 @@ class TestPIIInputDefense:
 
         assert result is None
         assert len(middleware.evidence) == 0
+
+
+# -- Tests: Post-tool result scanning (via wrap_tool_call) --------------------
+#
+# Regression tests for the fix that moved post-tool output scanning out of the
+# dead `after_tool` lifecycle hook (which AgentMiddleware never invoked) and
+# into wrap_tool_call / awrap_tool_call, where the tool result is available.
+
+from langchain_core.messages import ToolMessage
+
+
+def _tool_result_handler(content: str) -> MagicMock:
+    """A handler that returns a real ToolMessage (so isinstance checks apply)."""
+    handler = MagicMock()
+    handler.return_value = ToolMessage(content=content, tool_call_id="call_abc123")
+    return handler
+
+
+class TestPostToolScanning:
+    def test_pii_in_tool_result_is_redacted(self) -> None:
+        middleware = TealTigerMiddleware(
+            policies=[
+                {"type": "tool_allowlist", "tools": ["lookup"]},
+                {"type": "pii", "action": "redact"},
+            ],
+            mode=GovernanceMode.ENFORCE,
+        )
+        middleware.before_agent({}, MagicMock())
+        request = make_tool_request("lookup", {"id": "42"})
+        handler = _tool_result_handler("Customer SSN is 123-45-6789")
+
+        result = middleware.wrap_tool_call(request, handler)
+
+        handler.assert_called_once_with(request)
+        assert isinstance(result, ToolMessage)
+        # The SSN must not survive into the result the agent sees.
+        assert "123-45-6789" not in result.content
+
+    def test_pii_in_tool_result_blocked_when_configured(self) -> None:
+        middleware = TealTigerMiddleware(
+            policies=[
+                {"type": "tool_allowlist", "tools": ["lookup"]},
+                {"type": "pii", "action": "block"},
+            ],
+            mode=GovernanceMode.ENFORCE,
+        )
+        middleware.before_agent({}, MagicMock())
+        request = make_tool_request("lookup", {"id": "42"})
+        handler = _tool_result_handler("SSN 123-45-6789 and card 4111-1111-1111-1111")
+
+        result = middleware.wrap_tool_call(request, handler)
+
+        assert isinstance(result, ToolMessage)
+        assert "[GOVERNANCE BLOCKED]" in result.content
+        assert "123-45-6789" not in result.content
+
+    def test_clean_tool_result_passes_through(self) -> None:
+        middleware = TealTigerMiddleware(
+            policies=[
+                {"type": "tool_allowlist", "tools": ["lookup"]},
+                {"type": "pii", "action": "redact"},
+            ],
+            mode=GovernanceMode.ENFORCE,
+        )
+        middleware.before_agent({}, MagicMock())
+        request = make_tool_request("lookup", {"id": "42"})
+        handler = _tool_result_handler("No sensitive data here.")
+
+        result = middleware.wrap_tool_call(request, handler)
+
+        assert isinstance(result, ToolMessage)
+        assert result.content == "No sensitive data here."
+
+    def test_monitor_mode_does_not_modify_tool_result(self) -> None:
+        middleware = TealTigerMiddleware(
+            policies=[
+                {"type": "tool_allowlist", "tools": ["lookup"]},
+                {"type": "pii", "action": "redact"},
+            ],
+            mode=GovernanceMode.MONITOR,
+        )
+        middleware.before_agent({}, MagicMock())
+        request = make_tool_request("lookup", {"id": "42"})
+        handler = _tool_result_handler("SSN 123-45-6789")
+
+        result = middleware.wrap_tool_call(request, handler)
+
+        # MONITOR records but never modifies.
+        assert result.content == "SSN 123-45-6789"
+
+    def test_no_output_policy_leaves_result_untouched(self) -> None:
+        middleware = TealTigerMiddleware(
+            policies=[{"type": "tool_allowlist", "tools": ["lookup"]}],
+            mode=GovernanceMode.ENFORCE,
+        )
+        middleware.before_agent({}, MagicMock())
+        request = make_tool_request("lookup", {"id": "42"})
+        handler = _tool_result_handler("SSN 123-45-6789")
+
+        result = middleware.wrap_tool_call(request, handler)
+
+        assert result.content == "SSN 123-45-6789"
+
+
+# -- Tests: async awrap_tool_call ---------------------------------------------
+
+
+class TestAsyncWrapToolCall:
+    @pytest.mark.asyncio
+    async def test_awrap_tool_call_allows_and_scans(self) -> None:
+        middleware = TealTigerMiddleware(
+            policies=[
+                {"type": "tool_allowlist", "tools": ["lookup"]},
+                {"type": "pii", "action": "redact"},
+            ],
+            mode=GovernanceMode.ENFORCE,
+        )
+        middleware.before_agent({}, MagicMock())
+        request = make_tool_request("lookup", {"id": "42"})
+
+        async def handler(_req):
+            return ToolMessage(content="SSN 123-45-6789", tool_call_id="call_abc123")
+
+        result = await middleware.awrap_tool_call(request, handler)
+
+        assert isinstance(result, ToolMessage)
+        assert "123-45-6789" not in result.content
+
+    @pytest.mark.asyncio
+    async def test_awrap_tool_call_denies_disallowed_tool(self) -> None:
+        middleware = TealTigerMiddleware(
+            policies=[{"type": "tool_allowlist", "tools": ["search"]}],
+            mode=GovernanceMode.ENFORCE,
+        )
+        middleware.before_agent({}, MagicMock())
+        request = make_tool_request("file_delete", {"path": "/etc/passwd"})
+
+        called = False
+
+        async def handler(_req):
+            nonlocal called
+            called = True
+            return ToolMessage(content="deleted", tool_call_id="call_abc123")
+
+        result = await middleware.awrap_tool_call(request, handler)
+
+        assert called is False
+        assert "[GOVERNANCE DENIED]" in result.content
