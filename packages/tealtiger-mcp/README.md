@@ -27,24 +27,24 @@ Good fits for the MCP server:
 - **You do not need a "TealTiger client."** The MCP *clients* are your existing host apps (Claude Desktop, Cursor, Kiro, Cline) or the official MCP client SDKs (`mcp` for Python, `@modelcontextprotocol/sdk` for TS). Point your client at this server using the config below.
 - **Deployment note:** because the server is Python, the host needs Python available (or run it via `uvx` / a container). That's a deployment detail, not a language limitation on callers.
 
-## Status
-
-> **Pre-release.** This package is functional and fully tested but **not yet published to PyPI**. Install from source (below) until the first release lands. The `pip install` / `uvx` instructions will work once it is published.
-
 ## Install
 
-### From source (current)
+```bash
+pip install tealtiger-mcp
+```
+
+Or run it without installing (fetches from PyPI on demand):
+
+```bash
+uvx tealtiger-mcp
+```
+
+### From source (development)
 
 ```bash
 git clone https://github.com/agentguard-ai/tealtiger.git
 cd tealtiger/packages/tealtiger-mcp
 pip install -e .
-```
-
-### From PyPI (once published)
-
-```bash
-pip install tealtiger-mcp
 ```
 
 ## Quick Start
