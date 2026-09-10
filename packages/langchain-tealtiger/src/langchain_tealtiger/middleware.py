@@ -61,8 +61,9 @@ class TealTigerMiddleware(AgentMiddleware):
     Multi-stage defense:
         - before_agent: Initialize governance session
         - before_model: Input defense (PII scan, prompt injection, content moderation)
-        - wrap_tool_call: Pre-tool defense (authorization, args validation, cost check)
-        - after_tool: Post-tool defense (output scanning, secret detection)
+        - wrap_tool_call / awrap_tool_call: Pre-tool defense (authorization,
+          args validation, cost check) AND post-tool defense (scanning the tool
+          result for PII/secrets before it re-enters context)
         - after_model: Output defense (response PII, secrets, content classification)
         - after_agent: Finalize evidence trail
 
@@ -322,68 +323,99 @@ class TealTigerMiddleware(AgentMiddleware):
             result = handler(request)
             # Record success for circuit breaker
             self._engine.record_tool_success(tool_name)
-            return result
         except Exception as exc:
             # Record failure for circuit breaker
             self._engine.record_tool_failure(tool_name, str(exc))
             raise
+        # Post-tool defense: scan the result before it re-enters agent context.
+        return self._scan_tool_result(result)
 
     # ── Post-tool defense (Stage 4) ──────────────────────────────
 
-    def after_tool(self, state: AgentState, runtime: Runtime) -> Dict[str, Any] | None:
-        """Post-tool defense: scan tool results before they re-enter context.
+    async def awrap_tool_call(
+        self,
+        request,
+        handler,
+    ):
+        """Async counterpart of ``wrap_tool_call``.
 
-        Evaluates:
-        - PII in tool output: scan results for sensitive data
-        - Secret detection: credentials in tool responses
-        - Cost tracking: record token/cost from tool execution
+        LangChain's ``AgentMiddleware`` requires an async ``awrap_tool_call`` for
+        agents invoked via ``ainvoke()`` / ``astream()``; without it the base
+        class raises ``NotImplementedError`` at the tool gate. The governance
+        engine is synchronous (deterministic, no I/O), so the evaluation logic is
+        identical to the sync path -- only the tool handler is awaited.
+        """
+        if self._mode == GovernanceMode.REPORT_ONLY:
+            return await handler(request)
 
-        In ENFORCE mode:
-        - PII/secrets in tool output → redact or block
+        tool_name = request.tool_call["name"]
+        tool_args = request.tool_call.get("args", {})
+
+        decision = self._engine.evaluate(
+            tool_name=tool_name,
+            tool_args=tool_args,
+        )
+
+        if decision.action == GovernanceAction.DENY and self._mode == GovernanceMode.ENFORCE:
+            self._engine.record_tool_failure(tool_name, "governance_denied")
+            return ToolMessage(
+                content=f"[GOVERNANCE DENIED] {decision.reason}",
+                tool_call_id=request.tool_call["id"],
+            )
+
+        try:
+            result = await handler(request)
+            self._engine.record_tool_success(tool_name)
+        except Exception as exc:
+            self._engine.record_tool_failure(tool_name, str(exc))
+            raise
+
+        return self._scan_tool_result(result)
+
+    def _scan_tool_result(self, result):
+        """Post-tool defense: scan a tool result before it re-enters context.
+
+        Runs inside ``wrap_tool_call`` / ``awrap_tool_call`` -- the point where the
+        tool result is actually available. ``AgentMiddleware`` has no post-tool
+        lifecycle hook, so scanning must happen here rather than in a separate
+        method (a former ``after_tool`` hook was never invoked by LangChain).
+
+        Mirrors the input/output stages:
+        - No output policies, non-ToolMessage result, or empty content -> unchanged.
+        - ENFORCE + DENY -> replace content with a governance-blocked notice.
+        - ENFORCE + REDACT -> replace content with the redacted text.
+        - MONITOR / REPORT_ONLY -> engine records the decision, result unchanged.
         """
         if not self._output_policies:
-            return None
+            return result
+        if not isinstance(result, ToolMessage):
+            return result
 
-        messages = state.get("messages", [])
-        if not messages:
-            return None
-
-        last_message = messages[-1]
-        if not isinstance(last_message, ToolMessage):
-            return None
-
-        content = last_message.content if isinstance(last_message.content, str) else str(last_message.content)
-
+        content = (
+            result.content if isinstance(result.content, str) else str(result.content)
+        )
         if not content:
-            return None
+            return result
 
+        tool_call_id = getattr(result, "tool_call_id", "unknown")
         decision = self._engine.evaluate_content(
             content=content,
             stage="tool_result",
-            context={
-                "message_type": "tool",
-                "tool_call_id": getattr(last_message, "tool_call_id", None),
-            },
+            context={"message_type": "tool", "tool_call_id": tool_call_id},
         )
 
         if self._mode == GovernanceMode.ENFORCE:
             if decision.action == GovernanceAction.DENY:
-                state["messages"][-1] = ToolMessage(
-                    content=f"[GOVERNANCE BLOCKED] Tool output contained restricted content",
-                    tool_call_id=getattr(last_message, "tool_call_id", "unknown"),
+                return ToolMessage(
+                    content="[GOVERNANCE BLOCKED] Tool output contained restricted content",
+                    tool_call_id=tool_call_id,
                 )
-                return {"governance_blocked": True, "reason": decision.reason}
-
             if decision.action == GovernanceAction.REDACT:
-                state["messages"][-1] = ToolMessage(
+                return ToolMessage(
                     content=decision.redacted_content or content,
-                    tool_call_id=getattr(last_message, "tool_call_id", "unknown"),
+                    tool_call_id=tool_call_id,
                 )
-                return {"governance_redacted": True}
-
-        return None
-
-    # ── Public API ───────────────────────────────────────────────
+        return result
 
     @property
     def summary(self) -> SessionSummary:
