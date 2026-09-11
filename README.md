@@ -97,7 +97,7 @@ client = observe(OpenAI())             # done — all calls are now instrumented
 print(client.get_cost())               # ObserveCostSummary(total_cost=0.0023, ...)
 ```
 
-**What you get automatically:** per-request cost tracking across 12 providers, structured audit log with correlation IDs, behavioral baseline (P50/P95/P99), PII detection in REPORT_ONLY mode, and an instant kill switch via `freeze()`. Under 5ms overhead per call.
+**What you get automatically:** per-request cost tracking across 7 providers, structured audit log with correlation IDs, behavioral baseline (P50/P95/P99), PII detection in REPORT_ONLY mode, and an instant kill switch via `freeze()`. Under 5ms overhead per call.
 
 See [examples/observe-quickstart.ts](./examples/observe-quickstart.ts) and [examples/observe_quickstart.py](./examples/observe_quickstart.py).
 
@@ -233,19 +233,14 @@ response = client.chat.completions.create(
 - **Cost Alerts** — Notifications at configurable thresholds
 - **Circuit Breakers** — Prevent runaway cost loops automatically
 
-### 🔌 12 LLM Providers
+### 🔌 7 LLM Providers
 - **OpenAI** — GPT-4, GPT-4o, GPT-3.5
 - **Anthropic** — Claude 3.5, Claude 3
 - **Google Gemini** — Multimodal support
 - **AWS Bedrock** — Claude, Titan, Jurassic, Command, Llama
-- **Azure OpenAI** — Deployment-based routing
+- **Azure OpenAI** — Deployment-based routing (shares OpenAI pricing)
 - **Cohere** — Chat, RAG, embeddings
 - **Mistral AI** — European data residency
-- **DeepSeek** — Cost-efficient reasoning models
-- **Groq** — Ultra-low latency inference
-- **Together AI** — Open-source model hosting
-- **HuggingFace TGI** — Self-hosted inference
-- **xAI (Grok)** — Real-time knowledge
 
 ### 🔌 Platform Adapters
 - **AWS Bedrock Agents** — Native guardrail adapter
@@ -294,6 +289,8 @@ response = client.chat.completions.create(
 
 ### 🔌 Framework Adapters
 
+TealTiger ships governance adapters for 13 agent frameworks. A selection:
+
 | Framework | Package | Install |
 |-----------|---------|---------|
 | LangChain | [langchain-tealtiger](https://github.com/agentguard-ai/tealtiger/tree/main/packages/langchain-tealtiger) | `pip install langchain-tealtiger` |
@@ -302,14 +299,7 @@ response = client.chat.completions.create(
 | Haystack | [haystack-tealtiger](https://github.com/agentguard-ai/tealtiger/tree/main/packages/haystack-tealtiger) | `pip install haystack-tealtiger` |
 | CAMEL-AI | [camelai-tealtiger](https://github.com/agentguard-ai/tealtiger/tree/main/packages/camelai-tealtiger) | `pip install camelai-tealtiger` |
 
-### 🔗 Infrastructure Integrations
-
-| Platform | What it provides | Install |
-|----------|-----------------|---------|
-| [Dakera](https://github.com/Dakera-AI/dakera-py) | Persistent governance state backend (cost storage, decision receipts, delegation chains via KG) | `pip install dakera[tealtiger]` | [Docs](https://dakera.ai/integrations/tealtiger) |
-| [AG2 Beta](https://github.com/ag2ai/ag2) | Governance middleware Extension for AG2 Beta agents | `pip install ag2-tealtiger` |
-| [Portkey Gateway](https://github.com/Portkey-AI/gateway) | Webhook guardrail for Portkey AI Gateway | [Example](https://github.com/agentguard-ai/tealtiger/tree/main/examples/portkey-webhook-guardrail) |
-| [Daytona](https://github.com/daytonaio/daytona) | Pre-execution governance for sandboxed code execution | [Example](https://github.com/agentguard-ai/tealtiger/tree/main/examples/daytona-governed-sandbox) |
+Also available: LangGraph, AG2, LlamaIndex, Mastra, OpenAI Agents, Google ADK, Semantic Kernel, OpenHands, CopilotKit. See [`packages/`](https://github.com/agentguard-ai/tealtiger/tree/main/packages) for the full set.
 
 ---
 
@@ -452,7 +442,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed guidelines.
 ## 🗺️ Roadmap
 
 **Current:** v1.4.0 — Zero-Config Adoption & Governance Dashboard (Released July 9, 2026)
-- `observe(client)` — 1-line auto-instrumentation for 12 providers, zero config
+- `observe(client)` — 1-line auto-instrumentation for 7 providers, zero config
 - `freeze()` / `unfreeze()` — instant kill switch, zero policy required
 - Behavioral baseline — P50/P95/P99 profiling built from first 100 requests
 - PII detection in REPORT_ONLY mode — passive scanning without blocking
