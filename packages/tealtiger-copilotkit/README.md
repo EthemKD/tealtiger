@@ -96,8 +96,9 @@ const actions = [
 
 ### 4. Content PII Scanner
 
+Scan arbitrary content (e.g. a serialized `useCopilotReadable` value) before it enters the model:
+
 ```typescript
-// Scan useCopilotReadable state before it enters the model
 const userState = getUserData(); // may contain PII
 const { text: safeState, decision } = await governance.scanContent(
   JSON.stringify(userState),
@@ -108,6 +109,42 @@ const { text: safeState, decision } = await governance.scanContent(
 // safeState has PII redacted — safe to pass to copilot
 // decision contains audit record of what was found
 ```
+
+### 4b. Scanning CopilotKit readable context
+
+`scanCopilotKitRequest()` targets the readable context CopilotKit actually
+sends to the model, and handles **both** CopilotKit generations:
+
+- **v1** — readable context is serialized into the **system message** as a
+  fenced code block (following the marker line *"The user has provided you
+  with the following context:"*, emitted by `defaultSystemMessage`). The
+  scanner redacts inside that fenced block only, leaving the rest of the
+  prompt and all user/assistant turns untouched.
+- **v2** — readable context is a structured array
+  `context: [{ description, value }]` on the agent input (`runAgent` /
+  `connectAgent`). The scanner redacts each entry's `value`; `description`
+  labels are left intact.
+
+```typescript
+import { scanCopilotKitRequest } from "tealtiger-copilotkit";
+
+// Works whether the body carries a v2 `context` array or a v1 system message
+const { body, findings, blocked } = scanCopilotKitRequest(
+  parsedRequestBody,
+  ["ssn", "credit_card", "email", "api_key"],
+  "redact", // "detect" | "redact" | "block"
+);
+// `body` is safe to forward; `findings` is the audit record
+```
+
+If neither shape is present, the scanner does **not** silently pass content
+through — it emits a warning and returns the body unchanged, so a
+CopilotKit format change surfaces in your logs rather than disabling PII
+scanning invisibly.
+
+> This replaces the pre-0.2.0 behavior, which targeted a `<TextContext>` tag
+> that does not exist in CopilotKit and therefore never matched real traffic.
+> See the [changelog](#changelog).
 
 ## Governance Modes
 
@@ -151,6 +188,30 @@ Built-in deterministic patterns for:
 - Phone numbers (US/international)
 - API keys (OpenAI, AWS, GitHub, GitLab)
 - IP addresses
+
+## Changelog
+
+### 0.2.0
+
+- **Fix (readable-context PII scanning):** the scanner previously targeted a
+  `<TextContext>` tag that does not exist anywhere in CopilotKit, so
+  `scanCopilotKitRequest()` silently no-op'd on real traffic — readable-context
+  PII was never actually redacted. It now targets the real formats:
+  - **v1:** the fenced context block in the system message emitted by
+    `defaultSystemMessage`.
+  - **v2:** the structured `context: [{ description, value }]` array on the
+    agent input.
+- **New:** `scanReadableContextArray(context, categories, action)` for
+  directly scanning a v2 context array, exported alongside the existing
+  `scanReadableContext` and `scanCopilotKitRequest`.
+- When no readable context is found, the scanner now emits a warning instead
+  of silently doing nothing.
+
+### 0.1.x
+
+- Initial three-layer governance (route guard, action wrapper, content
+  scanner). The 0.1.x content scanner did not work against real CopilotKit
+  output — upgrade to 0.2.0.
 
 ## License
 

@@ -117,6 +117,8 @@ src/
 !packages/tealtiger-contracts/python/src/**
 !packages/tealtiger-mcp/src/
 !packages/tealtiger-mcp/src/**
+!packages/tealtiger-copilotkit/src/
+!packages/tealtiger-copilotkit/src/**
 
 # Postman collections
 postman/
