@@ -1,6 +1,6 @@
 {
   "name": "tealtiger-copilotkit",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Deterministic governance middleware for CopilotKit — action authorization, PII scanning, cost budgets, and structured audit trail",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -44,7 +44,7 @@
     "@copilotkit/runtime": "^1.8.0",
     "typescript": "^5.5.0",
     "tsup": "^8.0.0",
-    "vitest": "^4.1.10",
-    "eslint": "^10.7.0"
+    "vitest": "^2.0.0",
+    "eslint": "^9.0.0"
   }
 }
