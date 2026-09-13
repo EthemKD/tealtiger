@@ -374,12 +374,12 @@ def _configure_network_transport(host: str, port: int) -> None:
     mcp.settings.host = host
     mcp.settings.port = port
 
-    # mcp >= 1.17 adds localhost DNS-rebinding protection at construction
-    # time. If the caller deliberately binds beyond loopback, keeping that
-    # localhost-only policy would make the listener reject legitimate Host
-    # headers. Match FastMCP's own non-loopback construction behaviour by
-    # disabling the auto-generated localhost policy in that case. Older mcp
-    # 1.x releases do not expose this setting, hence the feature check.
+    # mcp >= 1.23 auto-enables localhost DNS-rebinding protection at
+    # construction time. If the caller deliberately binds beyond loopback,
+    # keeping that localhost-only policy would make the listener reject
+    # legitimate Host headers. Match FastMCP's own non-loopback construction
+    # behaviour by disabling the auto-generated localhost policy in that case.
+    # Older mcp 1.x releases do not expose this setting, hence the feature check.
     if hasattr(mcp.settings, "transport_security"):
         mcp.settings.transport_security = (
             _DEFAULT_TRANSPORT_SECURITY if host in _LOOPBACK_HOSTS else None
