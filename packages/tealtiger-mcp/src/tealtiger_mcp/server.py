@@ -33,6 +33,10 @@ from tealtiger import (
 # Server instance
 # ---------------------------------------------------------------------------
 
+DEFAULT_HOST = "127.0.0.1"
+DEFAULT_PORT = 8000
+_LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
 mcp = FastMCP(
     "TealTiger",
     instructions=(
@@ -40,7 +44,16 @@ mcp = FastMCP(
         "content moderation, cost estimation, and budget checks. "
         "All enforcement runs locally — no data leaves your process."
     ),
+    # FastMCP 1.8 defaulted to 0.0.0.0 while newer 1.x releases default to
+    # loopback. Set this explicitly so TealTiger stays local by default across
+    # the full supported mcp 1.x range.
+    host=DEFAULT_HOST,
+    port=DEFAULT_PORT,
 )
+
+# Newer mcp 1.x releases auto-enable DNS-rebinding protection for localhost.
+# Keep the generated setting so repeated main() calls in tests can restore it.
+_DEFAULT_TRANSPORT_SECURITY = getattr(mcp.settings, "transport_security", None)
 
 # ---------------------------------------------------------------------------
 # Shared instances (lazy-initialized, reused across calls)
@@ -344,27 +357,42 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--host",
-        default=mcp.settings.host,
-        help="Bind host for SSE or Streamable HTTP (default: 127.0.0.1).",
+        default=DEFAULT_HOST,
+        help=f"Bind host for SSE or Streamable HTTP (default: {DEFAULT_HOST}).",
     )
     parser.add_argument(
         "--port",
         type=int,
-        default=mcp.settings.port,
-        help="Bind port for SSE or Streamable HTTP (default: 8000).",
+        default=DEFAULT_PORT,
+        help=f"Bind port for SSE or Streamable HTTP (default: {DEFAULT_PORT}).",
     )
     return parser
+
+
+def _configure_network_transport(host: str, port: int) -> None:
+    """Apply network settings while keeping FastMCP v1 security coherent."""
+    mcp.settings.host = host
+    mcp.settings.port = port
+
+    # mcp >= 1.17 adds localhost DNS-rebinding protection at construction
+    # time. If the caller deliberately binds beyond loopback, keeping that
+    # localhost-only policy would make the listener reject legitimate Host
+    # headers. Match FastMCP's own non-loopback construction behaviour by
+    # disabling the auto-generated localhost policy in that case. Older mcp
+    # 1.x releases do not expose this setting, hence the feature check.
+    if hasattr(mcp.settings, "transport_security"):
+        mcp.settings.transport_security = (
+            _DEFAULT_TRANSPORT_SECURITY if host in _LOOPBACK_HOSTS else None
+        )
 
 
 def main(argv: list[str] | None = None) -> None:
     """Run the TealTiger MCP server using the selected transport."""
     args = _build_parser().parse_args(argv)
 
-    # FastMCP v1 keeps HTTP transport configuration on the server settings.
-    # stdio does not use host/port, so leave those settings untouched there.
+    # stdio does not use host/port; network transports do.
     if args.transport != "stdio":
-        mcp.settings.host = args.host
-        mcp.settings.port = args.port
+        _configure_network_transport(args.host, args.port)
 
     mcp.run(transport=args.transport)
 
