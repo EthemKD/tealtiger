@@ -159,7 +159,8 @@ Once connected, ask Claude (or any MCP client):
 │  Claude /    │     │  TealTiger MCP      │     │  AI Provider │
 │  MCP Client  │────▶│  Server             │     │  (OpenAI,    │
 │              │     │                     │     │   Anthropic,  │
-│              │◀────│  │ Guardrails    │  │     │   etc.)      │
+│              │◀────│  ┌───────────────┐  │     │   etc.)      │
+│              │     │  │ Guardrails    │  │     │              │
 │              │     │  │ Cost Tracker  │  │     │              │
 │              │     │  │ PII Redaction │  │     │              │
 │              │     │  └───────────────┘  │     │              │
