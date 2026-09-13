@@ -173,7 +173,7 @@ The MCP server wraps the TealTiger Python SDK. All processing happens locally in
 
 - Python 3.10+
 - `tealtiger` >= 1.4.0
-- `mcp` >= 1.0.0, < 2  (targets the v1 FastMCP API; 2.x migration tracked separately)
+- `mcp` >= 1.8.0, < 2  (Streamable HTTP first shipped in 1.8.0; 2.x migration tracked separately)
 
 ## License
 
