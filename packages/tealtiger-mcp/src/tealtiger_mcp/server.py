@@ -5,11 +5,12 @@ Exposes TealTiger guardrails, cost tracking, and budget enforcement
 as MCP tools for Claude Desktop, Cursor, Kiro, and any MCP client.
 
 Usage:
-    tealtiger-mcp                  # stdio transport (default)
-    tealtiger-mcp --transport sse  # SSE transport for remote access
+    tealtiger-mcp                                  # stdio transport (default)
+    tealtiger-mcp --transport sse                 # SSE transport for remote access
+    tealtiger-mcp --transport streamable-http     # Streamable HTTP transport
 """
 
-import asyncio
+import argparse
 import json
 from typing import Any
 
@@ -332,9 +333,40 @@ async def security_preflight(
 # ---------------------------------------------------------------------------
 
 
-def main():
-    """Run the TealTiger MCP server."""
-    mcp.run()
+def _build_parser() -> argparse.ArgumentParser:
+    """Build the command-line parser for transport selection."""
+    parser = argparse.ArgumentParser(description="Run the TealTiger MCP server.")
+    parser.add_argument(
+        "--transport",
+        choices=("stdio", "sse", "streamable-http"),
+        default="stdio",
+        help="MCP transport to use (default: stdio).",
+    )
+    parser.add_argument(
+        "--host",
+        default=mcp.settings.host,
+        help="Bind host for SSE or Streamable HTTP (default: 127.0.0.1).",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=mcp.settings.port,
+        help="Bind port for SSE or Streamable HTTP (default: 8000).",
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    """Run the TealTiger MCP server using the selected transport."""
+    args = _build_parser().parse_args(argv)
+
+    # FastMCP v1 keeps HTTP transport configuration on the server settings.
+    # stdio does not use host/port, so leave those settings untouched there.
+    if args.transport != "stdio":
+        mcp.settings.host = args.host
+        mcp.settings.port = args.port
+
+    mcp.run(transport=args.transport)
 
 
 if __name__ == "__main__":
